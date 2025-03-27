@@ -117,7 +117,7 @@ def plot_timeline(roadmap_data):
     st.plotly_chart(fig, use_container_width=True)
 
 def main():
-    st.title("Career Path Planner (Powered by Groq)")
+    st.title("Career Path Planner)")
     
     # Input Section
     with st.container():
