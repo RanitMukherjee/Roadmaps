@@ -1,0 +1,5 @@
+streamlit
+google-generativeai
+plotly
+python-dotenv
+youtube-search
