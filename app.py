@@ -1,10 +1,10 @@
 import streamlit as st
-import google.generativeai as genai
 import plotly.express as px
 import json
 import os
 from youtube_search import YoutubeSearch
 from dotenv import load_dotenv
+from groq import Groq  # Make sure to install with: pip install groq
 
 # Load environment variables
 load_dotenv()
@@ -16,18 +16,15 @@ st.set_page_config(
     layout="wide"
 )
 
-# Initialize Gemini model with API key
-def initialize_model():
-    api_key = os.getenv("GEMINI_API_KEY")
+# Initialize Groq client
+def initialize_groq():
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        st.error("GEMINI_API_KEY not found in environment variables")
+        st.error("GROQ_API_KEY not found in environment variables")
         st.stop()
-    
-    # Configure the API key - THIS IS THE CRITICAL FIX
-    genai.configure(api_key=api_key)
-    return genai.GenerativeModel('gemini-1.5-pro')
+    return Groq(api_key=api_key)
 
-model = initialize_model()
+client = initialize_groq()
 
 def generate_roadmap(current_status, target_role, experience):
     prompt = f"""
@@ -36,13 +33,13 @@ def generate_roadmap(current_status, target_role, experience):
     To: {target_role}
     With {experience} years experience.
 
-    IMPORTANT: You must return ONLY valid JSON with this exact structure:
+    Return ONLY valid JSON with this exact structure:
     {{
         "roadmap_name": "Roadmap for {target_role}",
         "gap_analysis": "analysis text here",
         "timeline": [
             {{
-                "phase": "Phase 1 (0-3 months)",
+                "phase": "Phase 1 (0-3)",
                 "focus_areas": ["area1", "area2"],
                 "milestones": ["milestone1", "milestone2"],
                 "tasks": ["task1", "task2"]
@@ -53,25 +50,20 @@ def generate_roadmap(current_status, target_role, experience):
     """
     
     try:
-        response = model.generate_content(prompt)
-        if not response.text:
-            st.error("Empty response from API")
-            return None
-            
-        # Clean response text to extract JSON
-        response_text = response.text.strip()
-        if response_text.startswith("```json"):
-            response_text = response_text[7:-3].strip()
-        elif response_text.startswith("```"):
-            response_text = response_text[3:-3].strip()
-            
-        roadmap = json.loads(response_text)
+        chat_completion = client.chat.completions.create(
+            messages=[{
+                "role": "user",
+                "content": prompt
+            }],
+            model="llama-3.3-70b-versatile",
+            temperature=0.3,
+            response_format={"type": "json_object"}
+        )
+        
+        response = chat_completion.choices[0].message.content
+        roadmap = json.loads(response)
         return roadmap
         
-    except json.JSONDecodeError:
-        st.error("Failed to parse JSON response. Raw response:")
-        st.code(response.text)
-        return None
     except Exception as e:
         st.error(f"API Error: {str(e)}")
         return None
@@ -85,14 +77,11 @@ def plot_timeline(roadmap_data):
     for phase in roadmap_data.get("timeline", []):
         phase_name = phase["phase"]
         
-        # Extract time range (e.g., "0-3 months" -> 0, 3)
+        # Extract time range (e.g., "0-3" -> 0, 3)
         try:
             time_range = phase_name.split("(")[-1].split(")")[0]
-            start_str, end_str = time_range.split("-")[:2]
-            start = int(''.join(filter(str.isdigit, start_str)))
-            end = int(''.join(filter(str.isdigit, end_str)))
+            start, end = map(int, time_range.split("-")[:2])
         except (ValueError, IndexError, AttributeError):
-            # Fallback if parsing fails
             start, end = 0, 3  # Default values
             
         for area in phase["focus_areas"]:
@@ -122,12 +111,13 @@ def plot_timeline(roadmap_data):
     fig.update_layout(
         height=500, 
         xaxis_title="Months",
-        xaxis=dict(tickvals=list(range(0, 13)), ticktext=[f"{m} month(s)" for m in range(0, 13)])
+        xaxis=dict(tickvals=list(range(0, 13)), 
+                  ticktext=[f"{m} month(s)" for m in range(0, 13)])
     )
     st.plotly_chart(fig, use_container_width=True)
 
 def main():
-    st.title("Career Path Planner")
+    st.title("Career Path Planner (Powered by Groq)")
     
     # Input Section
     with st.container():
@@ -167,10 +157,12 @@ def main():
         with tab2:
             st.subheader("Recommended Projects")
             try:
-                projects = model.generate_content(
-                    f"Suggest 3 hands-on projects for {target_role} considering: {current_status}"
-                ).text
-                st.markdown(projects)
+                projects_prompt = f"Suggest 3 hands-on projects for {target_role} considering: {current_status}"
+                projects_response = client.chat.completions.create(
+                    messages=[{"role": "user", "content": projects_prompt}],
+                    model="llama-3.3-70b-versatile"
+                )
+                st.markdown(projects_response.choices[0].message.content)
             except Exception as e:
                 st.error(f"Failed to generate projects: {str(e)}")
         
