@@ -33,10 +33,9 @@ An AI-powered career transition assistant that generates personalized roadmaps u
 ### Prerequisites
 - Python 3.9+
 - Groq API key (free tier available)
-- YouTube Data API v3 key (optional)
 
 ### Installation
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/career-path-planner.git
-cd career-path-planner
+git clone https://github.com/RanitMukherjee/Roadmaps.git
+cd Roadmaps
